@@ -1,0 +1,579 @@
+package com.turtlegraphics;
+
+public class MainClass {
+
+	public static void main(String[] args) {
+//		TurtleGraphics demo = new TurtleGraphics();
+		TurtleGraphics Main = new TurtleGraphics();
+		// TODO Auto-generated method stub
+
+	}
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+package com.turtlegraphics;
+
+import java.awt.*;
+import javax.swing.*;
+import java.awt.event.*;
+// For file handling
+import java.io.*;
+import java.util.*;
+import uk.ac.leedsbeckett.oop.LBUGraphics;
+import java.awt.image.BufferedImage;
+import javax.imageio.ImageIO; // For reading/writing image files
+
+
+public class TurtleGraphics extends LBUGraphics {
+   private boolean isPenDown = true;
+   private int penWidth = 1;
+   private Color penColor = Color.BLACK;
+   private java.util.List<String> commandHistory = new ArrayList<>();
+   private boolean imageSaved = false;
+   private JTextArea messageBox = new JTextArea(10, 25);
+   private JTextField commandField;
+   
+   private JList<String> historyList;
+   private DefaultListModel<String> historyModel;
+   private Stack<BufferedImage> undoStack = new Stack<>();
+
+   public static void main(String[] args) {
+        new TurtleGraphics();
+  }
+
+    public TurtleGraphics() {
+       JFrame MainFrame = new JFrame("Turtle Graphics");
+       MainFrame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+       MainFrame.setLayout(new BorderLayout());
+
+       // Add drawing area
+       MainFrame.add(this, BorderLayout.CENTER);
+
+       // Command input area
+       commandField = new JTextField();
+       MainFrame.add(commandField, BorderLayout.SOUTH);
+       commandField.addActionListener(e -> {
+           String cmd = commandField.getText();
+           processCommand(cmd);
+           commandField.setText("");
+       });
+       
+    // Right-side panel to contain both command history and message box
+       JPanel rightPanel = new JPanel();
+       rightPanel.setLayout(new BorderLayout());
+
+       // Top part: Command History
+       historyModel = new DefaultListModel<>();
+       historyList = new JList<>(historyModel);
+       JScrollPane historyScrollPane = new JScrollPane(historyList);
+       historyScrollPane.setBorder(BorderFactory.createTitledBorder(""));
+       rightPanel.add(historyScrollPane, BorderLayout.NORTH);
+
+       // Bottom part: Message Box
+       messageBox.setEditable(false);
+       messageBox.setBackground(Color.BLUE);
+       messageBox.setForeground(Color.WHITE);
+       JScrollPane messageScrollPane = new JScrollPane(messageBox);
+       messageScrollPane.setBorder(BorderFactory.createTitledBorder("Command History"));
+       rightPanel.add(messageScrollPane, BorderLayout.CENTER);
+
+       // Add the combined panel to the EAST side of the frame
+       MainFrame.add(rightPanel, BorderLayout.EAST);
+
+       historyModel = new DefaultListModel<>();
+       historyList = new JList<>(historyModel);
+       MainFrame.add(historyScrollPane, BorderLayout.WEST); // Ensure this line exists
+
+       JPanel historyPanel = new JPanel(new BorderLayout());
+       historyPanel.add(new JLabel("Command History:"), BorderLayout.SOUTH);
+       historyPanel.add(historyScrollPane, BorderLayout.CENTER);
+
+       JPanel historyButtonPanel = new JPanel();
+       historyPanel.add(historyButtonPanel, BorderLayout.SOUTH);
+
+       MainFrame.add(historyPanel, BorderLayout.WEST);
+       
+       
+       // Load previous commands from file
+       try (BufferedReader reader = new BufferedReader(new FileReader("commands.txt"))) {
+           String line;
+           while ((line = reader.readLine()) != null) {
+               messageBox.append(line + "\n");
+           }
+       } catch (IOException e) {
+           System.out.println("No previous command history found.");
+       }
+       
+    // Add UI Panel with Buttons (TOP or LEFT)
+       JPanel controlPanel = new JPanel();
+       controlPanel.setLayout(new FlowLayout());
+
+       JButton penUpBtn = new JButton("pendown");
+       penUpBtn.addActionListener(e -> processCommand("pendown"));
+       controlPanel.add(penUpBtn);
+       
+       JButton penDownBtn = new JButton("penup");
+       penDownBtn.addActionListener(e -> processCommand("penup"));
+       controlPanel.add(penDownBtn);
+
+       JButton clearBtn = new JButton("Clear");
+       clearBtn.addActionListener(e -> processCommand("clear"));
+       controlPanel.add(clearBtn);
+
+       JButton resetBtn = new JButton("Reset");
+       resetBtn.addActionListener(e -> processCommand("reset"));
+       controlPanel.add(resetBtn);
+
+       MainFrame.add(controlPanel, BorderLayout.NORTH); // You can also use BorderLayout.WEST if you prefer side panel
+       
+    // Add to your control panel setup:
+       JButton clearMessagesBtn = new JButton("Clear Message");
+       clearMessagesBtn.addActionListener(e -> messageBox.setText(""));
+       controlPanel.add(clearMessagesBtn);
+       
+    // Menu Bar
+       JMenuBar menuBar = new JMenuBar();
+
+       // File Menu
+       JMenu fileMenu = new JMenu("File");
+       JMenuItem saveImageItem = new JMenuItem("Save Image");
+       JMenuItem loadImageItem = new JMenuItem("Load Image");
+       JMenuItem saveCommandsItem = new JMenuItem("Save Commands");
+       JMenuItem loadCommandsItem = new JMenuItem("Load Commands");
+       JMenuItem exitItem = new JMenuItem("Exit");
+
+       fileMenu.add(saveImageItem);
+       fileMenu.add(loadImageItem);
+       fileMenu.addSeparator();
+       fileMenu.add(saveCommandsItem);
+       fileMenu.add(loadCommandsItem);
+       fileMenu.addSeparator();
+       fileMenu.add(exitItem);
+
+       // Help Menu
+       
+       JMenu helpMenu = new JMenu("Help");
+       JMenuItem aboutItem = new JMenuItem("About");
+
+       helpMenu.add(aboutItem);
+       JMenuItem commandDetailsItem = new JMenuItem("Command Details");
+       helpMenu.add(commandDetailsItem);
+       commandDetailsItem.addActionListener(e -> {
+           JOptionPane.showMessageDialog(null, "Available commands:\n" +
+               "penup, pendown, left <angle>, right <angle>, move <distance>, reverse <distance>,\n" +
+               "black, red, green, white, pencolour <R G B>, penwidth <value>,\n" +
+               "square <size>, triangle <size> or triangle <a b c>,\n" +
+               "clear, reset, saveimage, loadimage, savecommands, loadcommands");
+       });
+
+       // Add menus to the menu bar
+       menuBar.add(fileMenu);
+       menuBar.add(helpMenu);
+
+       MainFrame.setJMenuBar(menuBar);
+
+       // Menu Actions
+       saveImageItem.addActionListener(e -> {
+           try {
+               saveImage();
+           } catch (IOException ex) {
+               showMessage("Failed to save image: " + ex.getMessage());
+           }
+       });
+
+       loadImageItem.addActionListener(e -> {
+           try {
+               loadImage();
+           } catch (IOException ex) {
+               showMessage("Failed to load image: " + ex.getMessage());
+           }
+       });
+
+       saveCommandsItem.addActionListener(e -> {
+           try {
+               saveCommands();
+           } catch (IOException ex) {
+               showMessage("Failed to save commands: " + ex.getMessage());
+           }
+       });
+
+       loadCommandsItem.addActionListener(e -> {
+           try {
+               loadCommands();
+           } catch (IOException ex) {
+               showMessage("Failed to load commands: " + ex.getMessage());
+           }
+       });
+
+       exitItem.addActionListener(e -> System.exit(0));
+
+       // About Action
+       aboutItem.addActionListener(e -> {
+           JOptionPane.showMessageDialog(MainFrame,
+               "Turtle Graphics Tool\nCreated by Raj Joshi \nVersion 1.0",
+               "About",
+               JOptionPane.INFORMATION_MESSAGE);
+       });
+
+       MainFrame.pack();
+       MainFrame.setVisible(true);
+
+       reset();
+       super.about(); // Draw something at startup
+    }
+    
+    @Override
+    public void about() {
+        reset();
+        setTurtleSpeed(1);
+        drawOff();
+        setStroke(5);
+
+       // Draw R
+        forward(90);
+        setPenColour(Color.RED);
+        right(90);
+        forward(150);
+        right(90);
+        drawOn();
+        forward(200);
+        right(90);
+        for (int i = 0; i < 18; i++) {
+            forward(9);
+            right(10);
+        }
+
+        drawOff();
+        left(125);
+        forward(10);
+        drawOn();
+        forward(125);
+
+        // Draw A
+        reset();
+        setStroke(6);
+        drawOff();
+        forward(90);
+        setPenColour(Color.YELLOW);
+        right(90);
+        forward(40);
+        right(105);
+        drawOn();
+        forward(200);
+        right(150);
+        forward(200);
+        left(180);
+        forward(100);
+        left(75);
+        forward(50);
+
+        // Draw J
+        drawOff();
+        reset();
+        setPenColour(Color.pink);
+        setStroke(5);
+        left();
+        forward(150);
+               
+        right();
+        forward(10);
+        
+        drawOn(); 
+
+
+        //Draw the vertical part of J
+
+        forward(60);
+        forward(-180);
+        forward(180);
+        //Bottom curve of J
+        	for (int i = 0; i < 25; i++) {
+        	    forward(3);
+        	    right(6);
+        	
+        	}
+        	reset();
+       }
+
+    @Override
+    public void processCommand(String command) {
+    	commandHistory.add(command);
+        messageBox.append(command + "\n"); // Add command to message box
+        String[] parts = command.trim().split("[ ,]+");
+        String action = parts[0].toLowerCase();
+
+        try {
+            switch (action) {
+                case "about":
+                    about();
+                    break;
+                case "penup":
+                    drawOff();
+                    isPenDown = false;
+                    break;
+                case "pendown":
+                    drawOn();
+                    isPenDown = true;
+                    break;
+                case "left":
+                    if (parts.length == 2) left(Integer.parseInt(parts[1]));
+                    else showMessage("Missing or invalid parameter for 'left'");
+                    break;
+                case "right":
+                    if (parts.length == 2) right(Integer.parseInt(parts[1]));
+                    else showMessage("Missing or invalid parameter for 'right'");
+                    break;
+                case "move":
+                    if (parts.length == 2) {
+                        int distance = Integer.parseInt(parts[1]);
+                        // Get current turtle position
+                        int x = getxPos();
+                        int y = getyPos();
+                        // Calculate new position
+                        int newX = x + (int)(distance * Math.sin(Math.toRadians(getDirection())));
+                        int newY = y - (int)(distance * Math.cos(Math.toRadians(getDirection())));
+                        // Check if new position is within screen bounds
+                        if (newX < 0 || newX > getWidth() || newY < 0 || newY > getHeight()) {
+                            showMessage("Cannot move turtle off-screen!");
+                        } else {
+                            forward(distance);
+                        }
+                    } else {
+                        showMessage("Missing or invalid parameter for 'move'");
+                    }
+                    break;
+                case "reverse":
+                    if (parts.length == 2) forward(-Integer.parseInt(parts[1]));
+                    else forward(100);
+//                    else showMessage("Missing or invalid parameter for 'reverse'");
+                    break;
+                case "black":
+                    setPenColour(Color.BLACK);
+                    break;
+                case "red":
+                   setPenColour(Color.RED);
+                    break;
+                case "green":
+                    setPenColour(Color.GREEN);
+                    break;
+                case "white":
+                    setPenColour(Color.WHITE);
+                    break;
+                case "reset":
+                    reset();
+                    break;
+                case "clear":
+                    clear();
+                    break;
+                case "square":
+                    if (parts.length == 2) drawSquare(Integer.parseInt(parts[1]));
+                    else showMessage("Missing or invalid parameter for 'square'");
+                    break;
+                
+                case "triangle":
+                    if (parts.length == 2) drawEquilateralTriangle(Integer.parseInt(parts[1]));
+                    else if (parts.length == 4) drawTriangle(Integer.parseInt(parts[1]), Integer.parseInt(parts[2]), Integer.parseInt(parts[3]));
+                    else showMessage("Missing or invalid parameters for 'triangle'");
+                    break;
+                case "pencolour":
+                    if (parts.length == 4)
+                        setPenColour(new Color(Integer.parseInt(parts[1]), Integer.parseInt(parts[2]), Integer.parseInt(parts[3])));
+                    else showMessage("Invalid RGB format");
+                    break;
+                case "penwidth":
+                    if (parts.length == 2) setStroke(Integer.parseInt(parts[1]));
+                    else showMessage("Missing or invalid parameter for 'penwidth'");
+                    break;
+                case "saveimage":
+                    saveImage();
+                    break;
+                case "loadimage":
+                    loadImage();
+                    break;
+                case "savecommands":
+                    saveCommands();
+                    break;
+                case "loadcommands":
+                    loadCommands();
+                case "nepal":
+                	Nepal();
+                    break;
+                case "equilateral":
+                	drawEquilateralTriangle(Integer.parseInt(parts[1]));
+                	break;
+                default:
+                    showMessage("Unknown command: " + action);
+            }
+        } catch (NumberFormatException e) {
+            showMessage("Invalid number format in command");
+        } catch (Exception e) {
+            showMessage("Error: " + e.getMessage());
+        }
+    }
+
+    private void drawSquare(int length) {
+        for (int i = 0; i < 4; i++) {
+            forward(length);
+            right(90);
+        }
+    }
+
+    private void drawEquilateralTriangle(int size) {
+    	drawOn();
+        for (int i = 0; i < 3; i++) {
+            forward(size);
+            right(120);
+        }
+    }
+    
+    private void drawTriangle(int a, int b, int c) {
+        forward(a);
+        right(120);
+        forward(b);
+        right(120);
+        forward(c);
+        right(120);
+    }
+    
+    private void Nepal() {
+    	reset();
+    	drawOff();
+    	forward(100);
+    	right();
+    	forward(100);
+    	right();
+    	drawOn();
+    	forward(250);
+    	right(120);
+    	forward(150);
+    	left(30);
+    	right(150);
+    	forward(125);
+    	left(120);
+    	forward(120);
+    	right(145);
+    	forward(120); 
+    	
+    	reset();
+    	
+    }
+
+    private void saveImage() throws IOException {
+        // Provide an initial directory
+        File initialDirectory = new File("C:/Users/YourUserName/Pictures"); // Replace with your desired folder
+        JFileChooser fileChooser = new JFileChooser(initialDirectory);
+        fileChooser.setDialogTitle("Save Image");
+
+        // Set the default file extension to ".png"
+        fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("PNG Image", "png"));
+
+        int userSelection = fileChooser.showSaveDialog(this);
+
+        if (userSelection == JFileChooser.APPROVE_OPTION) {
+            File fileToSave = fileChooser.getSelectedFile(); 
+
+            // Ensure the file has a .png extension if not already present
+            if (!fileToSave.getName().endsWith(".png")) {
+                fileToSave = new File(fileToSave.getAbsolutePath() + ".png");
+            }
+
+            // Create a BufferedImage to capture the current panel content
+            BufferedImage image = new BufferedImage(getWidth(), getHeight(), BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g2d = image.createGraphics();
+
+            // Call the paint method to render the component onto the image
+            paint(g2d); 
+            g2d.dispose();
+
+            // Write the BufferedImage to the selected file
+            ImageIO.write(image, "PNG", fileToSave);
+
+            imageSaved = true;
+            showMessage("Image saved successfully!");
+        }
+    }
+    
+    public void clearScreen() {
+        // Clear the screen by resetting the drawing area (this could be repainting with white or background color)
+        repaint(); // Repaints the component to clear the screen
+    }
+
+
+    public void loadImage() throws IOException {
+        if (!imageSaved) {
+            int result = JOptionPane.showConfirmDialog(this, "Current image not saved. Do you want to save it?", "Warning", JOptionPane.YES_NO_OPTION);
+            if (result == JOptionPane.YES_OPTION) {
+                saveImage(); // Save the image if the user chooses 'Yes'
+            }}
+        
+
+        JFileChooser fileChooser = new JFileChooser();
+        if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+            try {
+                File file = fileChooser.getSelectedFile();
+                BufferedImage img = ImageIO.read(file);
+                Graphics2D g2d = (Graphics2D) getGraphics();
+                g2d.drawImage(img, 0, 0, this);
+                g2d.dispose();
+                displayMessage("Image loaded: " + file.getName());
+            } catch (IOException e) {
+                displayMessage("Error loading image: " + e.getMessage());
+            }
+        
+    }
+        }
+
+    private void saveCommands() throws IOException {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter("commands.txt"))) {
+            for (String cmd : commandHistory) {
+                writer.write(cmd);
+                writer.newLine(); // More readable than adding "\n" manually
+            }
+        }
+        imageSaved = true;
+    }
+
+
+    private void loadCommands() throws IOException {
+        if (!imageSaved) {
+            int confirm = JOptionPane.showConfirmDialog(this, "Current commands not saved. Save them?", "Warning", JOptionPane.YES_NO_OPTION);
+            if (confirm == JOptionPane.YES_OPTION) {
+                saveCommands();
+            }
+        }
+
+        File file = new File("commands.txt");
+        if (!file.exists()) {
+            JOptionPane.showMessageDialog(this, "Command file not found.", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                processCommand(line);
+            }
+        }
+    }
+
+    private void showMessage(String msg) {
+        JOptionPane.showMessageDialog(this, msg);
+    }
+    
+    
+ // for pen mix color red green blue
+    private boolean isValidColor(int value) {
+        return value >= 0 && value <= 255;
+    }
+}
